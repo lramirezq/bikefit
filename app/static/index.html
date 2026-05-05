@@ -1,0 +1,403 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>BikeFit</title>
+<style>
+* { margin: 0; padding: 0; box-sizing: border-box; }
+body { font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif; background: #1a1a2e; color: #eee; min-height: 100vh; }
+.screen { display: none; flex-direction: column; align-items: center; padding: 20px; max-width: 600px; margin: 0 auto; min-height: 100vh; }
+.screen.active { display: flex; }
+h1 { font-size: 1.5rem; margin-bottom: 16px; text-align: center; }
+h2 { font-size: 1.2rem; margin: 16px 0 8px; color: #00d4aa; }
+.btn { background: #00d4aa; color: #1a1a2e; border: none; padding: 14px 32px; border-radius: 8px; font-size: 1rem; font-weight: 600; cursor: pointer; margin: 8px; }
+.btn:hover { background: #00f0c0; }
+.btn:disabled { background: #555; color: #999; cursor: not-allowed; }
+.btn-danger { background: #ff4757; color: #fff; }
+
+/* Guía */
+.guide-list { text-align: left; width: 100%; }
+.guide-item { display: flex; align-items: flex-start; gap: 12px; padding: 12px; margin: 8px 0; background: #16213e; border-radius: 8px; border-left: 4px solid #00d4aa; }
+.guide-item .icon { font-size: 1.5rem; flex-shrink: 0; }
+.guide-item .text { font-size: 0.95rem; line-height: 1.4; }
+.guide-item .text strong { color: #00d4aa; }
+.guide-diagram { width: 100%; max-width: 400px; margin: 16px auto; background: #16213e; border-radius: 12px; padding: 20px; text-align: center; }
+.guide-diagram svg { width: 100%; height: auto; }
+
+/* Grabación */
+.video-container { position: relative; width: 100%; max-width: 500px; aspect-ratio: 16/9; background: #000; border-radius: 12px; overflow: hidden; margin: 12px 0; }
+.video-container video { width: 100%; height: 100%; object-fit: cover; }
+.video-overlay { position: absolute; top: 0; left: 0; width: 100%; height: 100%; pointer-events: none; }
+.recording-indicator { position: absolute; top: 12px; right: 12px; display: none; align-items: center; gap: 6px; background: rgba(255,71,87,0.9); padding: 6px 12px; border-radius: 20px; font-size: 0.8rem; font-weight: 600; }
+.recording-indicator.active { display: flex; }
+.rec-dot { width: 8px; height: 8px; background: #fff; border-radius: 50%; animation: blink 1s infinite; }
+@keyframes blink { 50% { opacity: 0; } }
+.timer { position: absolute; bottom: 12px; left: 50%; transform: translateX(-50%); background: rgba(0,0,0,0.7); padding: 4px 12px; border-radius: 12px; font-size: 1.1rem; font-variant-numeric: tabular-nums; }
+.timer.ready { color: #00d4aa; }
+.min-time-hint { position: absolute; top: 12px; left: 12px; background: rgba(0,0,0,0.7); padding: 4px 10px; border-radius: 12px; font-size: 0.75rem; color: #ffa502; }
+.controls { display: flex; gap: 12px; margin-top: 12px; }
+select { background: #16213e; color: #eee; border: 1px solid #333; padding: 10px; border-radius: 8px; font-size: 0.9rem; }
+
+/* Resultados */
+.results-card { width: 100%; background: #16213e; border-radius: 12px; padding: 16px; margin: 8px 0; }
+.metric { display: flex; justify-content: space-between; align-items: center; padding: 12px 0; border-bottom: 1px solid #2a2a4a; }
+.metric:last-child { border-bottom: none; }
+.metric-name { font-size: 0.9rem; color: #aaa; }
+.metric-value { font-size: 1.3rem; font-weight: 700; }
+.metric-range { font-size: 0.75rem; color: #666; }
+.severity-ok { color: #00d4aa; }
+.severity-warning { color: #ffa502; }
+.severity-critical { color: #ff4757; }
+.recommendation { padding: 12px; margin: 6px 0; border-radius: 8px; font-size: 0.9rem; line-height: 1.4; }
+.recommendation.ok { background: rgba(0,212,170,0.1); border-left: 3px solid #00d4aa; }
+.recommendation.warning { background: rgba(255,165,2,0.1); border-left: 3px solid #ffa502; }
+.recommendation.critical { background: rgba(255,71,87,0.1); border-left: 3px solid #ff4757; }
+
+/* Loading */
+.loading { display: none; flex-direction: column; align-items: center; gap: 16px; margin: 40px 0; }
+.loading.active { display: flex; }
+.spinner { width: 48px; height: 48px; border: 4px solid #333; border-top-color: #00d4aa; border-radius: 50%; animation: spin 0.8s linear infinite; }
+@keyframes spin { to { transform: rotate(360deg); } }
+</style>
+</head>
+<body>
+
+<!-- PANTALLA 1: GUÍA -->
+<div id="screen-guide" class="screen active">
+  <h1>🚴 BikeFit</h1>
+  <p style="color:#aaa; margin-bottom:16px; text-align:center;">Análisis biomecánico de tu posición en bici</p>
+
+  <div class="guide-diagram">
+    <svg viewBox="0 0 400 200" xmlns="http://www.w3.org/2000/svg">
+      <!-- Bici simplificada -->
+      <circle cx="280" cy="150" r="30" fill="none" stroke="#444" stroke-width="2"/>
+      <circle cx="140" cy="150" r="30" fill="none" stroke="#444" stroke-width="2"/>
+      <line x1="280" y1="150" x2="230" y2="100" stroke="#444" stroke-width="2"/>
+      <line x1="230" y1="100" x2="180" y2="90" stroke="#444" stroke-width="2"/>
+      <line x1="230" y1="100" x2="210" y2="150" stroke="#444" stroke-width="2"/>
+      <line x1="210" y1="150" x2="140" y2="150" stroke="#444" stroke-width="2"/>
+      <!-- Ciclista simplificado -->
+      <circle cx="240" cy="70" r="12" fill="none" stroke="#00d4aa" stroke-width="2"/>
+      <line x1="240" y1="82" x2="230" y2="100" stroke="#00d4aa" stroke-width="2"/>
+      <line x1="230" y1="100" x2="260" y2="130" stroke="#00d4aa" stroke-width="2"/>
+      <line x1="260" y1="130" x2="280" y2="150" stroke="#00d4aa" stroke-width="2"/>
+      <line x1="230" y1="100" x2="195" y2="90" stroke="#00d4aa" stroke-width="2"/>
+      <!-- Cámara -->
+      <rect x="20" y="100" width="30" height="20" rx="3" fill="#ffa502"/>
+      <circle cx="35" cy="110" r="5" fill="#1a1a2e"/>
+      <text x="35" y="135" text-anchor="middle" fill="#ffa502" font-size="10">📱</text>
+      <!-- Flecha distancia -->
+      <line x1="60" y1="160" x2="120" y2="160" stroke="#ffa502" stroke-width="1" stroke-dasharray="4"/>
+      <text x="90" y="180" text-anchor="middle" fill="#ffa502" font-size="9">2-3 metros</text>
+    </svg>
+  </div>
+
+  <div class="guide-list">
+    <h2>📋 Preparación</h2>
+    <div class="guide-item">
+      <span class="icon">📱</span>
+      <div class="text"><strong>Posición de cámara:</strong> Coloca el móvil a la altura del eje del pedalier (centro de la bici), a 2-3 metros de distancia, en orientación horizontal.</div>
+    </div>
+    <div class="guide-item">
+      <span class="icon">➡️</span>
+      <div class="text"><strong>Lado derecho:</strong> Graba desde el lado derecho del ciclista. Debe verse completo: desde la cabeza hasta el pedal.</div>
+    </div>
+    <div class="guide-item">
+      <span class="icon">👕</span>
+      <div class="text"><strong>Ropa ajustada:</strong> Usa culotte y maillot ceñido. La ropa suelta confunde la detección de articulaciones.</div>
+    </div>
+    <div class="guide-item">
+      <span class="icon">💡</span>
+      <div class="text"><strong>Iluminación:</strong> Buena luz frontal o lateral. Evita contraluz (ventana detrás del ciclista).</div>
+    </div>
+    <div class="guide-item">
+      <span class="icon">🎯</span>
+      <div class="text"><strong>Fondo limpio:</strong> Fondo despejado sin personas ni objetos que confundan la detección.</div>
+    </div>
+
+    <h2>🚴 Durante la grabación</h2>
+    <div class="guide-item">
+      <span class="icon">⏱️</span>
+      <div class="text"><strong>Duración:</strong> Pedalea al menos 15-20 segundos a cadencia normal (80-90 rpm).</div>
+    </div>
+    <div class="guide-item">
+      <span class="icon">🖐️</span>
+      <div class="text"><strong>Manos en manetas:</strong> Posición natural de pedaleo, manos en las manetas (no en los drops).</div>
+    </div>
+    <div class="guide-item">
+      <span class="icon">👀</span>
+      <div class="text"><strong>Mirada al frente:</strong> Pedalea de forma natural, sin mirar a la cámara.</div>
+    </div>
+  </div>
+
+  <div style="margin-top:24px;">
+    <button class="btn" onclick="showScreen('record')">Comenzar grabación →</button>
+  </div>
+</div>
+
+<!-- PANTALLA 2: GRABACIÓN -->
+<div id="screen-record" class="screen">
+  <h1>🎬 Grabar ciclista</h1>
+
+  <div style="margin-bottom:12px;">
+    <select id="discipline-select">
+      <option value="road">🚴 Ruta</option>
+      <option value="mtb">🚵 MTB</option>
+      <option value="tt">⏱️ Contrarreloj</option>
+    </select>
+  </div>
+
+  <div class="video-container">
+    <video id="camera-preview" autoplay playsinline muted></video>
+    <svg class="video-overlay" viewBox="0 0 320 180" xmlns="http://www.w3.org/2000/svg">
+      <!-- Rueda trasera -->
+      <circle cx="100" cy="130" r="28" fill="none" stroke="rgba(0,212,170,0.5)" stroke-width="1.5"/>
+      <circle cx="100" cy="130" r="2" fill="rgba(0,212,170,0.5)"/>
+      <!-- Rueda delantera -->
+      <circle cx="240" cy="130" r="28" fill="none" stroke="rgba(0,212,170,0.5)" stroke-width="1.5"/>
+      <circle cx="240" cy="130" r="2" fill="rgba(0,212,170,0.5)"/>
+      <!-- Cuadro bici -->
+      <polyline points="100,130 140,90 200,90 170,130 100,130" fill="none" stroke="rgba(0,212,170,0.4)" stroke-width="1.2"/>
+      <line x1="200" y1="90" x2="170" y2="130" stroke="rgba(0,212,170,0.4)" stroke-width="1.2"/>
+      <!-- Horquilla -->
+      <line x1="200" y1="90" x2="220" y2="80" stroke="rgba(0,212,170,0.4)" stroke-width="1.2"/>
+      <line x1="220" y1="80" x2="240" y2="130" stroke="rgba(0,212,170,0.4)" stroke-width="1.2"/>
+      <!-- Tija + sillín -->
+      <line x1="140" y1="90" x2="135" y2="70" stroke="rgba(0,212,170,0.4)" stroke-width="1.2"/>
+      <line x1="128" y1="70" x2="142" y2="70" stroke="rgba(0,212,170,0.5)" stroke-width="2"/>
+      <!-- Manillar -->
+      <line x1="220" y1="80" x2="215" y2="75" stroke="rgba(0,212,170,0.4)" stroke-width="1.2"/>
+      <circle cx="215" cy="75" r="3" fill="none" stroke="rgba(0,212,170,0.5)" stroke-width="1"/>
+      <!-- Pedales/biela -->
+      <line x1="170" y1="130" x2="170" y2="145" stroke="rgba(0,212,170,0.4)" stroke-width="1.2"/>
+      <line x1="170" y1="130" x2="170" y2="115" stroke="rgba(0,212,170,0.4)" stroke-width="1.2"/>
+      <!-- CICLISTA -->
+      <!-- Cabeza -->
+      <circle cx="185" cy="45" r="10" fill="none" stroke="rgba(0,212,170,0.7)" stroke-width="1.5"/>
+      <!-- Torso (hombro a cadera) -->
+      <line x1="190" y1="55" x2="140" y2="75" stroke="rgba(0,212,170,0.7)" stroke-width="2"/>
+      <!-- Brazo (hombro-codo-mano) -->
+      <line x1="190" y1="55" x2="205" y2="65" stroke="rgba(0,212,170,0.7)" stroke-width="1.5"/>
+      <line x1="205" y1="65" x2="215" y2="75" stroke="rgba(0,212,170,0.7)" stroke-width="1.5"/>
+      <!-- Muslo (cadera-rodilla) -->
+      <line x1="140" y1="75" x2="160" y2="110" stroke="rgba(0,212,170,0.7)" stroke-width="2"/>
+      <!-- Pierna (rodilla-tobillo) -->
+      <line x1="160" y1="110" x2="170" y2="140" stroke="rgba(0,212,170,0.7)" stroke-width="2"/>
+      <!-- Pie -->
+      <line x1="170" y1="140" x2="178" y2="142" stroke="rgba(0,212,170,0.7)" stroke-width="1.5"/>
+      <!-- Puntos articulaciones -->
+      <circle cx="140" cy="75" r="3" fill="rgba(0,212,170,0.8)"/><!-- cadera -->
+      <circle cx="160" cy="110" r="3" fill="rgba(0,212,170,0.8)"/><!-- rodilla -->
+      <circle cx="170" cy="140" r="3" fill="rgba(0,212,170,0.8)"/><!-- tobillo -->
+      <circle cx="190" cy="55" r="3" fill="rgba(0,212,170,0.8)"/><!-- hombro -->
+      <circle cx="215" cy="75" r="3" fill="rgba(0,212,170,0.8)"/><!-- mano -->
+      <!-- Texto guía -->
+      <text x="160" y="172" text-anchor="middle" fill="rgba(0,212,170,0.6)" font-size="9" font-family="sans-serif">Alinea al ciclista con esta silueta</text>
+    </svg>
+    <div id="rec-indicator" class="recording-indicator">
+      <span class="rec-dot"></span> REC
+    </div>
+    <div id="timer" class="timer">00:00</div>
+    <div id="min-time-hint" class="min-time-hint">⏱️ Mínimo 15s</div>
+  </div>
+
+  <div class="controls">
+    <button class="btn" id="btn-record" onclick="toggleRecording()">⏺ Grabar</button>
+    <button class="btn btn-danger" id="btn-stop" onclick="stopRecording()" disabled>⏹ Detener</button>
+  </div>
+  <div class="controls">
+    <button class="btn" id="btn-analyze" onclick="analyzeVideo()" disabled style="background:#6c5ce7;color:#fff;">🔬 Analizar</button>
+    <button class="btn" onclick="showScreen('guide')" style="background:#333;color:#eee;">← Guía</button>
+  </div>
+
+  <div id="loading" class="loading">
+    <div class="spinner"></div>
+    <p>Analizando biomecánica...</p>
+    <p style="font-size:0.8rem;color:#666;">Procesando frames con MediaPipe</p>
+  </div>
+</div>
+
+<!-- PANTALLA 3: RESULTADOS -->
+<div id="screen-results" class="screen">
+  <h1>📊 Resultados del BikeFit</h1>
+
+  <div class="results-card" id="annotated-card" style="display:none;">
+    <h2 style="margin-top:0;">📸 Análisis visual</h2>
+    <img id="annotated-img" style="width:100%; border-radius:8px;" alt="Frame anotado"/>
+  </div>
+
+  <div class="results-card">
+    <h2 style="margin-top:0;">🪑 Sillín</h2>
+    <div id="results-saddle"></div>
+  </div>
+
+  <div class="results-card">
+    <h2 style="margin-top:0;">🤲 Manos / Manillar</h2>
+    <div id="results-hands"></div>
+  </div>
+
+  <div class="results-card">
+    <h2 style="margin-top:0;">🦶 Pies / Pedales</h2>
+    <div id="results-feet"></div>
+  </div>
+
+  <p id="frames-info" style="font-size:0.75rem; color:#666; margin-top:12px; text-align:center;"></p>
+
+  <div style="margin-top:24px; display:flex; gap:12px;">
+    <button class="btn" onclick="showScreen('record')">🔄 Nueva grabación</button>
+    <button class="btn" onclick="showScreen('guide')" style="background:#333;color:#eee;">← Inicio</button>
+  </div>
+</div>
+
+<script>
+let mediaRecorder = null;
+let recordedChunks = [];
+let recordedBlob = null;
+let timerInterval = null;
+let seconds = 0;
+let stream = null;
+
+function showScreen(name) {
+  document.querySelectorAll('.screen').forEach(s => s.classList.remove('active'));
+  document.getElementById('screen-' + name).classList.add('active');
+  if (name === 'record') initCamera();
+}
+
+async function initCamera() {
+  if (stream) return;
+  try {
+    stream = await navigator.mediaDevices.getUserMedia({
+      video: { facingMode: 'environment', width: { ideal: 1280 }, height: { ideal: 720 } },
+      audio: false
+    });
+    document.getElementById('camera-preview').srcObject = stream;
+  } catch (e) {
+    alert('No se pudo acceder a la cámara: ' + e.message);
+  }
+}
+
+function toggleRecording() {
+  if (mediaRecorder && mediaRecorder.state === 'recording') return;
+  recordedChunks = [];
+  recordedBlob = null;
+  document.getElementById('btn-analyze').disabled = true;
+  document.getElementById('timer').classList.remove('ready');
+  document.getElementById('min-time-hint').textContent = '⏱️ Mínimo 15s';
+  document.getElementById('min-time-hint').style.color = '#ffa502';
+
+  mediaRecorder = new MediaRecorder(stream, { mimeType: getSupportedMime() });
+  mediaRecorder.ondataavailable = e => { if (e.data.size > 0) recordedChunks.push(e.data); };
+  mediaRecorder.onstop = () => {
+    recordedBlob = new Blob(recordedChunks, { type: 'video/webm' });
+    document.getElementById('btn-analyze').disabled = false;
+  };
+
+  mediaRecorder.start();
+  seconds = 0;
+  updateTimer();
+  timerInterval = setInterval(() => { seconds++; updateTimer(); }, 1000);
+
+  document.getElementById('rec-indicator').classList.add('active');
+  document.getElementById('btn-record').disabled = true;
+  document.getElementById('btn-stop').disabled = false;
+}
+
+function stopRecording() {
+  if (mediaRecorder && mediaRecorder.state === 'recording') {
+    mediaRecorder.stop();
+  }
+  clearInterval(timerInterval);
+  document.getElementById('rec-indicator').classList.remove('active');
+  document.getElementById('btn-record').disabled = false;
+  document.getElementById('btn-stop').disabled = true;
+}
+
+function updateTimer() {
+  const m = String(Math.floor(seconds / 60)).padStart(2, '0');
+  const s = String(seconds % 60).padStart(2, '0');
+  const timer = document.getElementById('timer');
+  timer.textContent = m + ':' + s;
+  if (seconds >= 15) {
+    timer.classList.add('ready');
+    document.getElementById('min-time-hint').textContent = '✅ Tiempo suficiente';
+    document.getElementById('min-time-hint').style.color = '#00d4aa';
+  }
+}
+
+function getSupportedMime() {
+  const types = ['video/webm;codecs=vp9', 'video/webm;codecs=vp8', 'video/webm', 'video/mp4'];
+  return types.find(t => MediaRecorder.isTypeSupported(t)) || '';
+}
+
+async function analyzeVideo() {
+  if (!recordedBlob) return;
+  const loading = document.getElementById('loading');
+  loading.classList.add('active');
+  document.getElementById('btn-analyze').disabled = true;
+
+  const discipline = document.getElementById('discipline-select').value;
+  const formData = new FormData();
+  formData.append('video', recordedBlob, 'bikefit.webm');
+
+  try {
+    const res = await fetch('/analyze?discipline=' + discipline, { method: 'POST', body: formData });
+    if (!res.ok) throw new Error(await res.text());
+    const data = await res.json();
+    renderResults(data);
+    showScreen('results');
+  } catch (e) {
+    alert('Error en el análisis: ' + e.message);
+  } finally {
+    loading.classList.remove('active');
+    document.getElementById('btn-analyze').disabled = false;
+  }
+}
+
+const METRIC_LABELS = {
+  saddle_knee_angle: { name: 'Extensión de rodilla', icon: '🦵' },
+  saddle_hip_angle: { name: 'Ángulo de cadera', icon: '🪑' },
+  hands_elbow_angle: { name: 'Ángulo de codo', icon: '💪' },
+  hands_back_angle: { name: 'Ángulo de espalda', icon: '🔄' },
+  feet_ankle_angle: { name: 'Ángulo de tobillo', icon: '🦶' }
+};
+
+function renderResults(data) {
+  // Mostrar frame anotado
+  const card = document.getElementById('annotated-card');
+  if (data.annotated_frame) {
+    document.getElementById('annotated-img').src = 'data:image/jpeg;base64,' + data.annotated_frame;
+    card.style.display = 'block';
+  } else {
+    card.style.display = 'none';
+  }
+
+  const groups = { saddle: [], hands: [], feet: [] };
+  data.recommendations.forEach(r => {
+    groups[r.contact_point] = groups[r.contact_point] || [];
+    groups[r.contact_point].push(r);
+  });
+
+  ['saddle', 'hands', 'feet'].forEach(point => {
+    const container = document.getElementById('results-' + point);
+    container.innerHTML = (groups[point] || []).map(r => {
+      const label = METRIC_LABELS[r.metric] || { name: r.metric, icon: '📐' };
+      const icon = r.severity === 'ok' ? '✅' : r.severity === 'warning' ? '⚠️' : '🔴';
+      return `<div class="metric">
+        <div>
+          <div class="metric-name">${label.icon} ${label.name}</div>
+          <div class="metric-range">Ideal: ${r.ideal_range[0]}° – ${r.ideal_range[1]}°</div>
+        </div>
+        <div class="metric-value severity-${r.severity}">${r.value}°</div>
+      </div>
+      <div class="recommendation ${r.severity}">
+        ${icon} ${r.message}
+      </div>`;
+    }).join('');
+  });
+
+  document.getElementById('frames-info').textContent = `Frames analizados: ${data.frames_analyzed}`;
+}
+</script>
+</body>
+</html>
